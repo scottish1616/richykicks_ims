@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-midnight: #0b0b10;
+  --color-royal-purple: #5b21b6;
+  --color-gold: #d4af37;
+  --color-ivory: #f5f5f0;
+}
+
+body {
+  background-color: var(--color-midnight);
+  color: var(--color-ivory);
+}
