@@ -47,7 +47,7 @@ def _set_access_cookie(response: Response, token: str) -> None:
         value=token,
         httponly=True,
         secure=settings.is_production,
-        samesite="lax",
+        samesite="none" if settings.is_production else "lax",
         max_age=ACCESS_COOKIE_MAX_AGE,
         path="/",
     )
@@ -62,7 +62,7 @@ def _set_csrf_cookie(response: Response, token: str) -> None:
         value=token,
         httponly=False,
         secure=settings.is_production,
-        samesite="lax",
+        samesite="none" if settings.is_production else "lax",
         max_age=ACCESS_COOKIE_MAX_AGE,
         path="/",
     )
