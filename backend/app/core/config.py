@@ -4,11 +4,19 @@ All values are read from environment variables (.env locally) - nothing
 security-sensitive is ever hardcoded here. See .env.example for the full
 list of variables this app expects.
 """
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=BACKEND_DIR / ".env",
+        extra="ignore",
+    )
 
     # Database
     DATABASE_URL: str
