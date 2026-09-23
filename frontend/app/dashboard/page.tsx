@@ -53,7 +53,7 @@ export default function Page() {
   );
 }
 
-function AdminDashboard() {
+function AdminDashboard({ name }: { name: string }) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [sessions, setSessions] = useState<ReceivingSession[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +94,7 @@ function AdminDashboard() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="text-2xl font-semibold text-ivory">Dashboard</h1>
-      <p className="mt-1 text-soft-gray">Shop-wide overview</p>
+      <p className="mt-1 text-soft-gray">Welcome back, {name}</p>
 
       {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
@@ -145,7 +145,7 @@ function AdminDashboard() {
   );
 }
 
-function StaffDashboard() {
+function StaffDashboard({ name }: { name: string }) {
   const [summary, setSummary] = useState<StaffDashboardSummary | null>(null);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
   const [sessions, setSessions] = useState<ReceivingSession[]>([]);
@@ -184,7 +184,7 @@ function StaffDashboard() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="text-2xl font-semibold text-ivory">My Dashboard</h1>
-      <p className="mt-1 text-soft-gray">Your personal activity - not shop-wide figures</p>
+      <p className="mt-1 text-soft-gray">Welcome back, {name}</p>
 
       {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
