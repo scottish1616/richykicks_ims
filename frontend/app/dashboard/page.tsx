@@ -33,7 +33,22 @@ export default function Page() {
   return (
     <>
       <NavBar />
-      {user.role === "admin" ? <AdminDashboard /> : <StaffDashboard />}
+      <main className="mx-auto max-w-5xl px-6 py-10">
+        {user.role === "admin" ? (
+          <AdminDashboard name={user.name} />
+        ) : (
+          <StaffDashboard name={user.name} />
+        )}
+
+        <footer className="mt-12 text-left">
+          <p className="text-xs text-soft-gray">
+            2026 &copy; Designed by{" "}
+            <span className="font-semibold" style={{ color: "#5B21B6" }}>
+              LEVITES SOLUTIONS
+            </span>
+          </p>
+        </footer>
+      </main>
     </>
   );
 }
