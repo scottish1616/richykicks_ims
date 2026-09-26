@@ -37,6 +37,7 @@ class ReceivingSessionStatus(str, enum.Enum):
     CLOSED = "closed"
     APPROVED = "approved"
     REJECTED = "rejected"
+    CANCELLED = "cancelled"
 
 
 class ReceivingItemStatus(str, enum.Enum):

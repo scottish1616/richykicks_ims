@@ -15,6 +15,7 @@ export interface User {
 export interface Category {
   id: string;
   name: string;
+  sizes: string[];
 }
 
 export type StockStatus = "In Stock" | "Out of Stock";
@@ -61,7 +62,8 @@ export type ReceivingSessionStatus =
   | "staff_completed"
   | "closed"
   | "approved"
-  | "rejected";
+  | "rejected"
+  | "cancelled";
 export type ReceivingItemStatus = "pending" | "approved" | "rejected";
 
 export interface ReceivingSession {

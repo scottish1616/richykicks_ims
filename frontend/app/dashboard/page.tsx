@@ -40,10 +40,10 @@ export default function Page() {
           <StaffDashboard name={user.name} />
         )}
 
-        <footer className="mt-12 text-left">
+        <footer className="mt-12 flex justify-end">
           <p className="text-xs text-soft-gray">
             2026 &copy; Designed by{" "}
-            <span className="font-semibold" style={{ color: "#5B21B6" }}>
+            <span className="font-semibold" style={{ color: "#D4AF37" }}>
               LEVITES SOLUTIONS
             </span>
           </p>

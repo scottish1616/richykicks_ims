@@ -1,20 +1,21 @@
-"""
+r"""
 Stock receiving business logic implementing the full session workflow:
 
     OPEN -> STAFF_COMPLETED -> CLOSED -> APPROVED / REJECTED
+                                       \-> CANCELLED (only from OPEN, empty)
 
-Authoritative inventory is only ever touched in approve_session(),
-never at any earlier step. Every transition is a single atomic
-commit, and approve_session() takes a row lock on the session itself
-so two concurrent approve requests can't both pass the CLOSED check
-(double-approval prevention).
+Authoritative inventory is only ever touched in approve_session() and
+admin_direct_receive() - never at any earlier step. Every transition
+is a single atomic commit, and approve_session() takes a row lock on
+the session itself so two concurrent approve requests can't both pass
+the CLOSED check (double-approval prevention).
 
 Colour/size are normalized to "" (never None) at the submit boundary -
 see ProductVariant's docstring for why "" rather than NULL is used as
-the "not applicable" sentinel. Approval finds the matching
-(product_id, colour, size) variant or creates it on the spot, so new
-sizes/colours are never pre-defined anywhere - they exist the moment
-stock for them is first approved.
+the "not applicable" sentinel. Approval (and admin_direct_receive)
+find the matching (product_id, colour, size) variant or create it on
+the spot, so new sizes/colours are never pre-defined anywhere - they
+exist the moment stock for them is first approved or directly received.
 """
 import uuid
 from datetime import datetime, timezone
@@ -51,6 +52,10 @@ class SessionNotClosedError(Exception):
 
 
 class SessionAlreadyFinalizedError(Exception):
+    pass
+
+
+class SessionNotEmptyError(Exception):
     pass
 
 
@@ -124,9 +129,12 @@ def submit_item(
 def complete_session(
     db: Session, session_id: uuid.UUID, actor_id: uuid.UUID
 ) -> StockReceivingSession:
-    """Staff explicitly signals entry is finished (OPEN -> STAFF_COMPLETED).
-    This is NOT approval - it just tells Admin the submission is ready
-    to be reviewed, via a persistent notification."""
+    """Either role can complete a session they've been entering items
+    into (OPEN -> STAFF_COMPLETED) - the name reflects the common case,
+    but Admin must be able to complete a session they opened and filled
+    solo, without needing Staff involved at all. Not approval - just
+    tells Admin the submission is ready to be reviewed, via a
+    persistent notification."""
     session = _get_session_or_raise(db, session_id)
     if session.status != ReceivingSessionStatus.OPEN:
         raise SessionNotOpenError()
@@ -139,7 +147,9 @@ def complete_session(
     session.completed_by = actor_id
 
     admin_id = _admin_recipient_id(db)
-    if admin_id is not None:
+    # Don't notify Admin about their own action - only meaningful when
+    # someone else (Staff) is the one signaling completion.
+    if admin_id is not None and admin_id != actor_id:
         notification_service.notify(
             db,
             recipient_id=admin_id,
@@ -160,6 +170,35 @@ def complete_session(
         resource=f"session:{session_id}",
         result="success",
         metadata={"item_count": len(session.items)},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def cancel_session(
+    db: Session, session_id: uuid.UUID, actor_id: uuid.UUID
+) -> StockReceivingSession:
+    """Admin-only cleanup for a session that was opened but never used
+    (OPEN, zero items). Not a general-purpose abandon button - a
+    session with items must go through complete -> close -> reject
+    instead, so there's always a reviewable record of what was
+    entered. No notification needed: nothing was ever submitted, so
+    there's nothing for anyone to be told about."""
+    session = _get_session_or_raise(db, session_id)
+    if session.status != ReceivingSessionStatus.OPEN:
+        raise SessionNotOpenError()
+    if len(session.items) > 0:
+        raise SessionNotEmptyError()
+
+    session.status = ReceivingSessionStatus.CANCELLED
+    audit_service.log_event(
+        db,
+        event_type="receiving.session_cancelled",
+        user_id=actor_id,
+        resource=f"session:{session_id}",
+        result="success",
         commit=False,
     )
     db.commit()
@@ -245,7 +284,7 @@ def _get_or_create_variant(
     if variant is None:
         variant = ProductVariant(product_id=product_id, colour=colour, size=size, stock_quantity=0)
         db.add(variant)
-        db.flush()  # assign variant.id before the receiving item references it
+        db.flush()  # assign variant.id before the caller references it
     return variant
 
 
@@ -411,3 +450,53 @@ def reopen_session(
     db.commit()
     db.refresh(session)
     return session
+
+
+def admin_direct_receive(
+    db: Session,
+    admin_id: uuid.UUID,
+    product_id: uuid.UUID,
+    quantity: int,
+    price: Decimal,
+    colour: str | None = None,
+    size: str | None = None,
+) -> ProductVariant:
+    """Admin-only, session-free stock receipt (PRD-equivalent section
+    18): Admin is already the one who verifies/approves in the normal
+    workflow, so when acting alone there is no separate approval step
+    to route through - this updates inventory the moment it's called,
+    as one atomic transaction, logged distinctly from a
+    session-approval event so the audit trail is never ambiguous about
+    which path stock came through."""
+    colour = (colour or "").strip()
+    size = (size or "").strip()
+
+    try:
+        variant = _get_or_create_variant(db, product_id, colour, size)
+        variant.stock_quantity += quantity
+
+        product = db.query(Product).filter(Product.id == product_id).with_for_update().first()
+        if product is not None:
+            product.listed_price = price
+
+        audit_service.log_event(
+            db,
+            event_type="receiving.direct_admin_receipt",
+            user_id=admin_id,
+            resource=f"product:{product_id}",
+            result="success",
+            metadata={
+                "colour": colour,
+                "size": size,
+                "quantity": quantity,
+                "price": str(price),
+            },
+            commit=False,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    db.refresh(variant)
+    return variant

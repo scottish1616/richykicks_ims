@@ -63,3 +63,14 @@ class RejectSessionRequest(BaseModel):
 
 class ReopenSessionRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class DirectReceiveRequest(BaseModel):
+    """Admin-only, session-free stock receipt (PRD-equivalent section
+    18): no approval step, updates inventory the moment it's called."""
+
+    product_id: uuid.UUID
+    colour: str | None = Field(default=None, max_length=50)
+    size: str | None = Field(default=None, max_length=10)
+    quantity: int = Field(gt=0)
+    price: Decimal = Field(ge=0)

@@ -47,7 +47,11 @@ class ProductRead(ProductBase):
 
 
 class CategoryRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     name: str
+    # Standard sizes for the receiving-entry checkbox grid (empty for
+    # non-sized categories, e.g. Mikasa Balls, Socks). Not an ORM
+    # column - computed from app.core.product_sizes at request time,
+    # so this is built explicitly in the route rather than read via
+    # from_attributes.
+    sizes: list[str] = []

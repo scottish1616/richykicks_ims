@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_admin, require_any_role
 from app.core.csrf import verify_csrf
+from app.core.product_sizes import sizes_for_category
 from app.models.category import Category
 from app.models.product import Product
 from app.models.user import User
@@ -101,4 +102,7 @@ def update_product(
 
 @router.get("/categories", response_model=list[CategoryRead], dependencies=[Depends(require_any_role)])
 def list_categories(db: Session = Depends(get_db)):
-    return db.query(Category).order_by(Category.name).all()
+    categories = db.query(Category).order_by(Category.name).all()
+    return [
+        CategoryRead(id=c.id, name=c.name, sizes=sizes_for_category(c.name)) for c in categories
+    ]
