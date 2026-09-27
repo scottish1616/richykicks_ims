@@ -39,6 +39,10 @@ class SessionNotFoundError(Exception):
     pass
 
 
+class SessionAlreadyOpenError(Exception):
+    pass
+
+
 class SessionNotOpenError(Exception):
     pass
 
@@ -74,6 +78,22 @@ def _admin_recipient_id(db: Session) -> uuid.UUID | None:
 
 
 def open_session(db: Session, admin_id: uuid.UUID) -> StockReceivingSession:
+    active_session = (
+        db.query(StockReceivingSession)
+        .filter(
+            StockReceivingSession.status.in_(
+                [
+                    ReceivingSessionStatus.OPEN,
+                    ReceivingSessionStatus.STAFF_COMPLETED,
+                    ReceivingSessionStatus.CLOSED,
+                ]
+            )
+        )
+        .first()
+    )
+    if active_session is not None:
+        raise SessionAlreadyOpenError()
+
     session = StockReceivingSession(opened_by=admin_id, status=ReceivingSessionStatus.OPEN)
     db.add(session)
     audit_service.log_event(

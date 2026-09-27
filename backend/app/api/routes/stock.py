@@ -41,7 +41,13 @@ router = APIRouter(prefix="/api/stock", tags=["stock-receiving"])
     dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def open_session(user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return svc.open_session(db, admin_id=user.id)
+    try:
+        return svc.open_session(db, admin_id=user.id)
+    except svc.SessionAlreadyOpenError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An active receiving session already exists",
+        )
 
 
 @router.get(
