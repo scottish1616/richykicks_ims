@@ -8,7 +8,7 @@ current listed price changes later.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Numeric, Integer, DateTime, ForeignKey, CheckConstraint, func
+from sqlalchemy import Numeric, Integer, DateTime, ForeignKey, CheckConstraint, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,6 +20,7 @@ class Sale(Base):
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_sales_quantity_positive"),
         CheckConstraint("actual_price_paid >= 0", name="ck_sales_price_non_negative"),
+        CheckConstraint("payment_type IN ('cash', 'mpesa')", name="ck_sales_payment_type_valid"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -35,6 +36,9 @@ class Sale(Base):
     listed_price_at_sale: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     actual_price_paid: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     total_amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    payment_type: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="cash", server_default="cash"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True

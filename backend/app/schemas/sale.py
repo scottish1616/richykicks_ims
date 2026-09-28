@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +10,7 @@ class SaleCreate(BaseModel):
     product_variant_id: uuid.UUID
     quantity: int = Field(gt=0)
     actual_price_paid: Decimal = Field(ge=0)
+    payment_type: Literal["cash", "mpesa"] = "cash"
 
 
 class SaleRead(BaseModel):
@@ -21,6 +23,7 @@ class SaleRead(BaseModel):
     listed_price_at_sale: Decimal
     actual_price_paid: Decimal
     total_amount: Decimal
+    payment_type: Literal["cash", "mpesa"]
     created_at: datetime
     # Denormalized via Sale model properties so the frontend doesn't
     # need a separate products/variants lookup just to label a row.

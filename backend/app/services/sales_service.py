@@ -39,6 +39,7 @@ def record_sale(
     product_variant_id: uuid.UUID,
     quantity: int,
     actual_price_paid: Decimal,
+    payment_type: str = "cash",
 ) -> Sale:
     variant = (
         db.query(ProductVariant)
@@ -63,6 +64,7 @@ def record_sale(
         listed_price_at_sale=variant.product.listed_price,
         actual_price_paid=actual_price_paid,
         total_amount=actual_price_paid * quantity,
+        payment_type=payment_type,
     )
     variant.stock_quantity -= quantity
 
@@ -77,6 +79,7 @@ def record_sale(
             metadata={
                 "quantity": quantity,
                 "actual_price_paid": str(actual_price_paid),
+                "payment_type": payment_type,
                 "listed_price_at_sale": str(variant.product.listed_price),
                 "colour": variant.colour,
                 "size": variant.size,

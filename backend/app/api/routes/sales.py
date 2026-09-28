@@ -29,6 +29,7 @@ def create_sale(
             product_variant_id=payload.product_variant_id,
             quantity=payload.quantity,
             actual_price_paid=payload.actual_price_paid,
+            payment_type=payload.payment_type,
         )
     except VariantNotFoundError:
         raise HTTPException(

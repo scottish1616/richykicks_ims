@@ -79,6 +79,7 @@ export default function Page() {
                 <th className="px-4 py-3 font-medium">Qty</th>
                 <th className="px-4 py-3 font-medium">Listed Price</th>
                 <th className="px-4 py-3 font-medium">Paid</th>
+                <th className="px-4 py-3 font-medium">Payment Type</th>
                 <th className="px-4 py-3 font-medium">Total</th>
                 <th className="px-4 py-3 font-medium">Date</th>
               </tr>
@@ -96,6 +97,7 @@ export default function Page() {
                   <td className="px-4 py-3 text-ivory">
                     KSh {Number(s.actual_price_paid).toLocaleString()}
                   </td>
+                  <td className="px-4 py-3 text-soft-gray">{s.payment_type.toUpperCase()}</td>
                   <td className="px-4 py-3 text-gold">
                     KSh {Number(s.total_amount).toLocaleString()}
                   </td>
@@ -106,7 +108,7 @@ export default function Page() {
               ))}
               {sales.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-soft-gray">
+                  <td colSpan={9} className="px-4 py-6 text-center text-soft-gray">
                     No sales yet.
                   </td>
                 </tr>
@@ -135,6 +137,7 @@ function RecordSaleForm({
   const [size, setSize] = useState<string | null>(null);
   const [quantity, setQuantity] = useState("1");
   const [actualPrice, setActualPrice] = useState("");
+  const [paymentType, setPaymentType] = useState<"cash" | "mpesa">("cash");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -184,10 +187,12 @@ function RecordSaleForm({
           product_variant_id: selectedVariant.id,
           quantity: Number(quantity),
           actual_price_paid: actualPrice,
+          payment_type: paymentType,
         }),
       });
       setQuantity("1");
       setActualPrice("");
+      setPaymentType("cash");
       onRecorded();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to record sale");
@@ -207,7 +212,7 @@ function RecordSaleForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-soft-gray/20 bg-charcoal p-6 sm:grid-cols-2 lg:grid-cols-5"
+      className="mt-4 grid grid-cols-1 gap-4 rounded-lg border border-soft-gray/20 bg-charcoal p-6 sm:grid-cols-2 lg:grid-cols-6"
     >
       <div>
         <label className="block text-sm text-soft-gray">Product</label>
@@ -268,6 +273,18 @@ function RecordSaleForm({
       </div>
 
       <div>
+        <label className="block text-sm text-soft-gray">Payment Type</label>
+        <select
+          value={paymentType}
+          onChange={(e) => setPaymentType(e.target.value as "cash" | "mpesa")}
+          className="mt-1 w-full rounded-md border border-soft-gray/30 bg-midnight px-3 py-2 text-ivory outline-none focus:border-gold"
+        >
+          <option value="cash">Cash</option>
+          <option value="mpesa">M-Pesa</option>
+        </select>
+      </div>
+
+      <div>
         <label className="block text-sm text-soft-gray">
           Actual Price Paid (KSh)
           {selectedProduct && (
@@ -289,13 +306,13 @@ function RecordSaleForm({
       </div>
 
       {selectedVariant && selectedVariant.stock_quantity === 0 && (
-        <p className="text-sm text-error sm:col-span-2 lg:col-span-5">
+        <p className="text-sm text-error sm:col-span-2 lg:col-span-6">
           This colour/size is out of stock.
         </p>
       )}
-      {error && <p className="text-sm text-error sm:col-span-2 lg:col-span-5">{error}</p>}
+      {error && <p className="text-sm text-error sm:col-span-2 lg:col-span-6">{error}</p>}
 
-      <div className="sm:col-span-2 lg:col-span-5">
+      <div className="sm:col-span-2 lg:col-span-6">
         <Button
           type="submit"
           disabled={submitting || !selectedVariant || selectedVariant.stock_quantity === 0}

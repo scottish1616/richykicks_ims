@@ -48,6 +48,7 @@ export interface Sale {
   listed_price_at_sale: string;
   actual_price_paid: string;
   total_amount: string;
+  payment_type: "cash" | "mpesa";
   created_at: string;
   product_name: string;
   colour: string;
