@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProductBase(BaseModel):
@@ -22,7 +22,26 @@ class ProductUpdate(BaseModel):
     name: str | None = None
     category_id: uuid.UUID | None = None
     listed_price: Decimal | None = Field(default=None, ge=0)
-    is_active: bool | None = None
+
+
+class StockAdjustmentRequest(BaseModel):
+    adjustment: int
+    reason: str = Field(min_length=3, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_must_not_be_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 3:
+            raise ValueError("A reason of at least 3 characters is required")
+        return normalized
+
+    @field_validator("adjustment")
+    @classmethod
+    def adjustment_must_be_nonzero(cls, value: int) -> int:
+        if value == 0:
+            raise ValueError("Stock adjustment must not be zero")
+        return value
 
 
 class ProductVariantRead(BaseModel):

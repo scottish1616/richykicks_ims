@@ -34,6 +34,18 @@ class ReceivingItemCreate(BaseModel):
     price_submitted: Decimal = Field(ge=0)
 
 
+class ReceivingBatchItemCreate(BaseModel):
+    product_id: uuid.UUID
+    colour: str | None = Field(default=None, max_length=50)
+    size: str | None = Field(default=None, max_length=10)
+    quantity_submitted: int = Field(gt=0)
+    price_submitted: Decimal = Field(ge=0)
+
+
+class ReceivingBatchCreate(BaseModel):
+    items: list[ReceivingBatchItemCreate] = Field(min_length=1, max_length=500)
+
+
 class ReceivingItemCorrection(BaseModel):
     quantity_approved: int = Field(ge=0)
     price_approved: Decimal = Field(ge=0)
@@ -74,3 +86,15 @@ class DirectReceiveRequest(BaseModel):
     size: str | None = Field(default=None, max_length=10)
     quantity: int = Field(gt=0)
     price: Decimal = Field(ge=0)
+
+
+class DirectReceiveBatchItem(BaseModel):
+    product_id: uuid.UUID
+    colour: str | None = Field(default=None, max_length=50)
+    size: str | None = Field(default=None, max_length=10)
+    quantity: int = Field(gt=0)
+    price: Decimal = Field(ge=0)
+
+
+class DirectReceiveBatchRequest(BaseModel):
+    items: list[DirectReceiveBatchItem] = Field(min_length=1, max_length=500)

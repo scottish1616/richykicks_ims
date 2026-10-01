@@ -6,6 +6,7 @@ import { useAuth } from "../../lib/auth-context";
 import { apiFetch } from "../../lib/api";
 import Button from "../../components/Button";
 import NavBar from "../../components/NavBar";
+import ReceivingBuilder from "./ReceivingBuilder";
 import type { Category, Product, ReceivingItem, ReceivingSession } from "../../types";
 
 // useSearchParams() requires a Suspense boundary in the App Router -
@@ -58,15 +59,16 @@ function ReceivingPageContent() {
       setProducts(productsData);
       setCategories(categoriesData);
 
-      // A notification link (?session=<id>) always wins; otherwise
-      // keep whatever was already selected, or fall back to the most
-      // recent session.
+      // Staff are routed to the currently open intake session without
+      // having to select or understand the internal session workflow.
       const linked = searchParams.get("session");
-      if (linked && sessionsData.some((s) => s.id === linked)) {
-        setSelectedSessionId(linked);
-      } else if (sessionsData.length > 0) {
-        setSelectedSessionId((prev) => prev ?? sessionsData[0].id);
-      }
+      setSelectedSessionId((previous) => {
+        if (linked && sessionsData.some((session) => session.id === linked)) return linked;
+        if (user?.role === "staff") {
+          return sessionsData.find((session) => session.status === "open")?.id ?? null;
+        }
+        return previous ?? sessionsData[0]?.id ?? null;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load receiving sessions");
     } finally {
@@ -100,14 +102,12 @@ function ReceivingPageContent() {
   }, [selectedSessionId]);
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
+  const activeStaffSessionExists = sessions.some((session) =>
+    ["open", "staff_completed", "closed"].includes(session.status)
+  );
 
   function productName(productId: string): string {
     return products.find((p) => p.id === productId)?.name ?? "\u2014";
-  }
-
-  function categoryFor(product: Product | undefined): Category | undefined {
-    if (!product) return undefined;
-    return categories.find((c) => c.id === product.category_id);
   }
 
   function updateSessionInPlace(updated: ReceivingSession) {
@@ -224,77 +224,113 @@ function ReceivingPageContent() {
     <>
       <NavBar />
       <main className="mx-auto max-w-5xl px-6 py-10">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-ivory">Stock Receiving</h1>
-          {isAdmin && <Button onClick={handleOpenSession}>Open New Session</Button>}
-        </div>
+        <h1 className="text-2xl font-semibold text-ivory">Stock Receiving</h1>
 
         {error && <p className="mt-4 text-sm text-error">{error}</p>}
         {actionError && <p className="mt-4 text-sm text-error">{actionError}</p>}
 
-        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
-          <div className="md:col-span-1">
-            <h2 className="text-sm font-medium text-soft-gray">Sessions</h2>
-            <ul className="mt-2 space-y-1">
-              {sessions.map((s) => (
-                <li key={s.id}>
-                  <button
-                    onClick={() => setSelectedSessionId(s.id)}
-                    className={`w-full rounded-md border px-3 py-2 text-left text-sm ${
-                      s.id === selectedSessionId
-                        ? "border-gold text-gold"
-                        : "border-soft-gray/20 text-soft-gray hover:text-ivory"
-                    }`}
-                  >
-                    <div>{new Date(s.opened_at).toLocaleString()}</div>
-                    <StatusBadge status={s.status} />
-                  </button>
-                </li>
-              ))}
-              {sessions.length === 0 && (
-                <li className="text-sm text-soft-gray">
-                  No sessions yet.{" "}
-                  {isAdmin
-                    ? "Open one above."
-                    : "Ask an Admin to open one before entering received stock."}
-                </li>
-              )}
-            </ul>
-          </div>
-
-          <div className="md:col-span-2">
-            {selectedSession ? (
-              <SessionPanel
-                session={selectedSession}
-                items={items}
-                isAdmin={isAdmin}
-                products={products}
-                categories={categories}
-                productName={productName}
-                categoryFor={categoryFor}
-                onComplete={handleComplete}
-                onCancel={handleCancel}
-                onClose={handleClose}
-                onApprove={handleApprove}
-                onReject={handleReject}
-                onReopen={handleReopen}
-                onItemAdded={() => selectedSessionId && loadItems(selectedSessionId)}
-                onItemCorrected={(updated) =>
-                  setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
-                }
-              />
-            ) : (
-              <p className="text-soft-gray">Select a session to view its items.</p>
-            )}
-          </div>
+        <div className="mt-6">
+          {isAdmin ? (
+            <ReceivingBuilder
+              products={products}
+              categories={categories}
+              mode="direct"
+              onDirectSubmitted={() => {
+                apiFetch<Product[]>("/api/products").then(setProducts).catch(() => undefined);
+              }}
+            />
+          ) : selectedSession?.status === "open" ? (
+            <ReceivingBuilder
+              products={products}
+              categories={categories}
+              mode="staff"
+              sessionId={selectedSession.id}
+              onStaffSubmitted={(updated) => {
+                updateSessionInPlace(updated);
+                setSelectedSessionId(updated.id);
+                void loadItems(updated.id);
+              }}
+            />
+          ) : (
+            <div className="rounded-xl border border-soft-gray/20 bg-charcoal p-5">
+              <h2 className="text-lg font-medium text-ivory">No receiving intake is open</h2>
+              <p className="mt-1 text-sm text-soft-gray">
+                Ask an Admin to start staff receiving. Stock is only added after Admin approval.
+              </p>
+            </div>
+          )}
         </div>
 
-        {isAdmin && (
-          <DirectReceivePanel
-            products={products}
-            categories={categories}
-            categoryFor={categoryFor}
-          />
+        {isAdmin ? (
+          <section className="mt-10">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-ivory">Staff receiving review</h2>
+                <p className="mt-1 text-sm text-soft-gray">
+                  Staff submissions remain pending until you review and approve them.
+                </p>
+              </div>
+              <Button onClick={handleOpenSession} disabled={activeStaffSessionExists}>
+                {activeStaffSessionExists ? "Staff Receiving Active" : "Open Staff Receiving"}
+              </Button>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-3">
+              <div className="md:col-span-1">
+                <ul className="space-y-2">
+                  {sessions.map((session) => (
+                    <li key={session.id}>
+                      <button
+                        onClick={() => setSelectedSessionId(session.id)}
+                        className={`w-full rounded-lg border px-3 py-3 text-left text-sm ${
+                          session.id === selectedSessionId
+                            ? "border-gold text-gold"
+                            : "border-soft-gray/20 text-soft-gray hover:text-ivory"
+                        }`}
+                      >
+                        <div>{new Date(session.opened_at).toLocaleString()}</div>
+                        <StatusBadge status={session.status} />
+                      </button>
+                    </li>
+                  ))}
+                  {sessions.length === 0 && <li className="text-sm text-soft-gray">No staff submissions yet.</li>}
+                </ul>
+              </div>
+              <div className="md:col-span-2">
+                {selectedSession ? (
+                  <SessionPanel
+                    session={selectedSession}
+                    items={items}
+                    isAdmin={isAdmin}
+                    productName={productName}
+                    onComplete={handleComplete}
+                    onCancel={handleCancel}
+                    onClose={handleClose}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    onReopen={handleReopen}
+                    onItemCorrected={(updated) =>
+                      setItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+                    }
+                  />
+                ) : (
+                  <p className="text-sm text-soft-gray">No staff receiving session selected.</p>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="mt-8 rounded-xl border border-soft-gray/20 bg-charcoal p-4">
+            <h2 className="text-sm font-semibold text-ivory">Recent receiving status</h2>
+            <ul className="mt-3 space-y-2">
+              {sessions.slice(0, 3).map((session) => (
+                <li key={session.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-soft-gray">{new Date(session.opened_at).toLocaleString()}</span>
+                  <StatusBadge status={session.status} />
+                </li>
+              ))}
+              {sessions.length === 0 && <li className="text-sm text-soft-gray">No recent receiving activity.</li>}
+            </ul>
+          </section>
         )}
       </main>
     </>
@@ -305,33 +341,25 @@ function SessionPanel({
   session,
   items,
   isAdmin,
-  products,
-  categories,
   productName,
-  categoryFor,
   onComplete,
   onCancel,
   onClose,
   onApprove,
   onReject,
   onReopen,
-  onItemAdded,
   onItemCorrected,
 }: {
   session: ReceivingSession;
   items: ReceivingItem[];
   isAdmin: boolean;
-  products: Product[];
-  categories: Category[];
   productName: (id: string) => string;
-  categoryFor: (product: Product | undefined) => Category | undefined;
   onComplete: () => void;
   onCancel: () => void;
   onClose: () => void;
   onApprove: () => void;
   onReject: (reason: string) => void;
   onReopen: (reason: string) => void;
-  onItemAdded: () => void;
   onItemCorrected: (item: ReceivingItem) => void;
 }) {
   const [reasonMode, setReasonMode] = useState<"reject" | "reopen" | null>(null);
@@ -428,47 +456,19 @@ function SessionPanel({
         </div>
       )}
 
-      <table className="mt-3 w-full text-left text-sm">
-        <thead className="text-soft-gray">
-          <tr>
-            <th className="py-2 font-medium">Product</th>
-            <th className="py-2 font-medium">Colour</th>
-            <th className="py-2 font-medium">Size</th>
-            <th className="py-2 font-medium">Submitted</th>
-            <th className="py-2 font-medium">Approved</th>
-            <th className="py-2 font-medium">Status</th>
-            {canCorrect && <th className="py-2 font-medium">Correct</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              productName={productName(item.product_id)}
-              canCorrect={canCorrect}
-              onCorrected={onItemCorrected}
-            />
-          ))}
-          {items.length === 0 && (
-            <tr>
-              <td colSpan={7} className="py-4 text-soft-gray">
-                No items yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <div className="mt-3 space-y-2">
+        {items.map((item) => (
+          <ItemRow
+            key={item.id}
+            item={item}
+            productName={productName(item.product_id)}
+            canCorrect={canCorrect}
+            onCorrected={onItemCorrected}
+          />
+        ))}
+        {items.length === 0 && <p className="py-4 text-sm text-soft-gray">No items yet.</p>}
+      </div>
 
-      {session.status === "open" && (
-        <AddItemForm
-          products={products}
-          categories={categories}
-          categoryFor={categoryFor}
-          sessionId={session.id}
-          onAdded={onItemAdded}
-        />
-      )}
     </div>
   );
 }
@@ -525,60 +525,74 @@ function ItemRow({
   }
 
   return (
-    <tr className="border-t border-soft-gray/10">
-      <td className="py-2 text-ivory">{productName}</td>
-      <td className="py-2 text-soft-gray">{item.colour || "\u2014"}</td>
-      <td className="py-2 text-soft-gray">{item.size || "\u2014"}</td>
-      <td className="py-2 text-soft-gray">
-        {item.quantity_submitted} @ KSh {Number(item.price_submitted).toLocaleString()}
-      </td>
-      <td className="py-2 text-ivory">
-        {item.quantity_approved ?? "\u2014"}
-        {item.price_approved ? ` @ KSh ${Number(item.price_approved).toLocaleString()}` : ""}
-      </td>
-      <td className="py-2">
+    <article className="rounded-lg border border-soft-gray/15 bg-midnight/70 p-3 sm:p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="break-words font-medium text-ivory">{productName}</h3>
+          <p className="mt-1 text-sm text-soft-gray">
+            {[item.colour, item.size].filter(Boolean).join(" · ") || "No colour or size variant"}
+          </p>
+        </div>
         <StatusBadge status={item.status} />
-      </td>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+        <div>
+          <p className="text-xs text-soft-gray">Submitted</p>
+          <p className="mt-0.5 text-ivory">
+            {item.quantity_submitted} × KSh {Number(item.price_submitted).toLocaleString()}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-soft-gray">Approved</p>
+          <p className="mt-0.5 text-ivory">
+            {item.quantity_approved ?? "—"}
+            {item.price_approved ? ` × KSh ${Number(item.price_approved).toLocaleString()}` : ""}
+          </p>
+        </div>
+      </div>
       {canCorrect && (
-        <td className="py-2">
-          <div className="flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-soft-gray/10 pt-3">
+          <label className="w-24 text-xs text-soft-gray">
+            Approved qty
             <input
               type="number"
               min="0"
               value={qty}
               onChange={(e) => setQty(e.target.value)}
-              className="w-16 rounded-md border border-soft-gray/30 bg-midnight px-2 py-1 text-ivory"
+              className="mt-1 w-full rounded-md border border-soft-gray/30 bg-charcoal px-2 py-2 text-sm text-ivory"
             />
+          </label>
+          <label className="w-32 text-xs text-soft-gray">
+            Approved price
             <input
               type="number"
               min="0"
               step="0.01"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-20 rounded-md border border-soft-gray/30 bg-midnight px-2 py-1 text-ivory"
+              className="mt-1 w-full rounded-md border border-soft-gray/30 bg-charcoal px-2 py-2 text-sm text-ivory"
             />
-            <Button variant="secondary" onClick={handleSave} disabled={saving}>
-              Save
-            </Button>
-          </div>
-        </td>
+          </label>
+          <Button variant="secondary" onClick={handleSave} disabled={saving}>
+            Save correction
+          </Button>
+        </div>
       )}
-    </tr>
+    </article>
   );
 }
 
+const COMMON_COLOURS = ["Black", "White", "Red", "Blue", "Grey"];
+
 /**
- * Shared size-entry UI used by both AddItemForm (per-session receiving)
- * and DirectReceivePanel (session-free admin receipt). When the
- * selected product's category has standard sizes (e.g. Sneakers,
- * 36-46), this renders a checkbox grid with a quantity box per checked
- * size, so several sizes can be entered in one go instead of one
- * free-text row at a time. Categories with no standard sizes (e.g.
- * Mikasa Balls, Socks) fall back to a single free-text size field.
+ * Shared colour-entry UI for per-session and direct stock receiving.
+ * Five common colours are shown first; less common product colours can
+ * be added from a dropdown. One quantity applies to the selected combo.
  */
 function ColourEntryGrid({
   colours,
   quantities,
+  onColourToggle,
   onQuantityChange,
   freeTextColour,
   onFreeTextColourChange,
@@ -587,14 +601,32 @@ function ColourEntryGrid({
 }: {
   colours: string[];
   quantities: Record<string, string>;
-  onQuantityChange: (colour: string, quantity: string) => void;
+  onColourToggle: (colour: string, selected: boolean) => void;
+  onQuantityChange: (quantity: string) => void;
   freeTextColour: string;
   onFreeTextColourChange: (value: string) => void;
   pattern: string;
   onPatternChange: (value: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [additionalColour, setAdditionalColour] = useState("");
   const selectedCount = Object.keys(quantities).length;
+  const selectedColours = Object.keys(quantities);
+  const sharedQuantity = selectedColours.length > 0 ? quantities[selectedColours[0]] ?? "" : "";
+  const visibleColours = [
+    ...COMMON_COLOURS.filter((commonColour) =>
+      colours.some((colour) => colour.toLowerCase() === commonColour.toLowerCase())
+    ),
+    ...selectedColours.filter(
+      (colour) => !COMMON_COLOURS.some((commonColour) => commonColour.toLowerCase() === colour.toLowerCase())
+    ),
+  ];
+  const additionalColours = colours.filter(
+    (colour) =>
+      !COMMON_COLOURS.some((commonColour) => commonColour.toLowerCase() === colour.toLowerCase()) &&
+      !(colour in quantities)
+  );
+  const quantityPresets = ["1", "2", "3", "4", "5", "10", "20", "50", "100"];
 
   if (colours.length === 0) {
     return (
@@ -642,41 +674,84 @@ function ColourEntryGrid({
           <p className="mb-2 text-[10px] uppercase tracking-wide text-soft-gray/80">
             Select all colours in the combo. One quantity applies to the full combination.
           </p>
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-            {colours.map((colour) => {
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {visibleColours.map((colour) => {
               const checked = colour in quantities;
               return (
                 <div
                   key={colour}
-                  className={`flex items-center gap-1.5 rounded-md border px-1.5 py-1 ${
+                  className={`flex min-h-11 items-center gap-2 rounded-md border px-3 py-2 ${
                     checked ? "border-gold bg-gold/5" : "border-soft-gray/30"
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        onQuantityChange(colour, "1");
-                      } else {
-                        onQuantityChange(colour, "");
-                      }
-                    }}
+                    onChange={(e) => onColourToggle(colour, e.target.checked)}
+                    className="h-5 w-5 shrink-0 accent-gold"
                   />
                   <span className="text-sm text-ivory">{colour}</span>
-                  {checked && (
-                    <input
-                      type="number"
-                      min="1"
-                      value={quantities[colour]}
-                      onChange={(e) => onQuantityChange(colour, e.target.value)}
-                      className="w-14 rounded-md border border-soft-gray/30 bg-midnight px-1 py-0.5 text-xs text-ivory"
-                    />
-                  )}
                 </div>
               );
             })}
           </div>
+          {additionalColours.length > 0 && (
+            <div className="mt-3">
+              <label className="block text-[10px] uppercase tracking-wide text-soft-gray/80">
+                More colours
+              </label>
+              <select
+                value={additionalColour}
+                onChange={(e) => {
+                  const colour = e.target.value;
+                  if (colour) onColourToggle(colour, true);
+                  setAdditionalColour("");
+                }}
+                className="mt-1 w-full rounded-md border border-soft-gray/30 bg-midnight px-2 py-2 text-sm text-ivory"
+              >
+                <option value="">Add another colour...</option>
+                {additionalColours.map((colour) => (
+                  <option key={colour} value={colour}>
+                    {colour}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {selectedCount > 0 && (
+            <div className="mt-3 rounded-md border border-soft-gray/20 p-3">
+              <label className="block text-[10px] uppercase tracking-wide text-soft-gray/80">
+                Quantity for selected colours
+              </label>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <select
+                  value={sharedQuantity}
+                  onChange={(e) => onQuantityChange(e.target.value)}
+                  className="rounded-md border border-soft-gray/30 bg-midnight px-2 py-2 text-sm text-ivory"
+                >
+                  <option value="">Choose quantity</option>
+                  {sharedQuantity && !quantityPresets.includes(sharedQuantity) && (
+                    <option value={sharedQuantity}>{sharedQuantity} (custom)</option>
+                  )}
+                  {quantityPresets.map((quantity) => (
+                    <option key={quantity} value={quantity}>
+                      {quantity}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={sharedQuantity}
+                  onChange={(e) => onQuantityChange(e.target.value)}
+                  aria-label="Enter stock quantity"
+                  placeholder="Enter quantity"
+                  className="w-32 rounded-md border border-soft-gray/30 bg-midnight px-2 py-2 text-sm text-ivory"
+                />
+              </div>
+            </div>
+          )}
           <div className="mt-3 space-y-2">
             <div>
               <label className="block text-[10px] uppercase tracking-wide text-soft-gray/80">
@@ -903,13 +978,19 @@ function AddItemForm({
   ).sort();
   const hasKnownColours = knownColours.length > 0;
 
-  function handleColourQuantityChange(colour: string, quantity: string) {
+  function handleColourQuantityChange(quantity: string) {
+    setColourQuantities((prev) => {
+      return Object.fromEntries(Object.keys(prev).map((colour) => [colour, quantity]));
+    });
+  }
+
+  function handleColourToggle(colour: string, selected: boolean) {
     setColourQuantities((prev) => {
       const next = { ...prev };
-      if (quantity === "") {
-        delete next[colour];
+      if (selected) {
+        next[colour] = Object.values(prev)[0] || "1";
       } else {
-        next[colour] = quantity;
+        delete next[colour];
       }
       return next;
     });
@@ -1014,6 +1095,7 @@ function AddItemForm({
       <ColourEntryGrid
         colours={knownColours}
         quantities={colourQuantities}
+        onColourToggle={handleColourToggle}
         onQuantityChange={handleColourQuantityChange}
         freeTextColour={freeTextColour}
         onFreeTextColourChange={setFreeTextColour}
@@ -1089,17 +1171,19 @@ function DirectReceivePanel({
   ).sort();
   const hasKnownColours = knownColours.length > 0;
 
-  function handleColourQuantityChange(colour: string, quantity: string) {
+  function handleColourQuantityChange(quantity: string) {
+    setColourQuantities((prev) => {
+      return Object.fromEntries(Object.keys(prev).map((colourName) => [colourName, quantity]));
+    });
+  }
+
+  function handleColourToggle(colour: string, selected: boolean) {
     setColourQuantities((prev) => {
       const next = { ...prev };
-      if (quantity === "") {
+      if (selected) {
+        next[colour] = Object.values(prev)[0] || "1";
+      } else {
         delete next[colour];
-        return next;
-      }
-
-      const selectedColours = new Set(Object.keys(next).concat(colour));
-      for (const colourName of selectedColours) {
-        next[colourName] = quantity;
       }
       return next;
     });
@@ -1207,6 +1291,7 @@ function DirectReceivePanel({
         <ColourEntryGrid
           colours={knownColours}
           quantities={colourQuantities}
+          onColourToggle={handleColourToggle}
           onQuantityChange={handleColourQuantityChange}
           freeTextColour={freeTextColour}
           onFreeTextColourChange={setFreeTextColour}

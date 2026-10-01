@@ -22,7 +22,9 @@ from app.models.stock_receiving import StockReceivingItem, StockReceivingSession
 from app.models.user import User
 from app.schemas.product import ProductVariantRead
 from app.schemas.stock_receiving import (
+    DirectReceiveBatchRequest,
     DirectReceiveRequest,
+    ReceivingBatchCreate,
     ReceivingItemCorrection,
     ReceivingItemCreate,
     ReceivingItemRead,
@@ -92,6 +94,38 @@ def submit_item(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     except svc.SessionNotOpenError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session is not open")
+
+
+@router.post(
+    "/sessions/{session_id}/items/batch",
+    response_model=ReceivingSessionRead,
+    dependencies=[Depends(require_any_role), Depends(verify_csrf)],
+)
+def submit_items_batch(
+    session_id: uuid.UUID,
+    payload: ReceivingBatchCreate,
+    user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Save all variant lines and complete the session atomically."""
+    try:
+        return svc.submit_items_and_complete(
+            db=db,
+            session_id=session_id,
+            actor_id=user.id,
+            items=[item.model_dump() for item in payload.items],
+        )
+    except svc.SessionNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    except svc.ProductNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    except svc.SessionNotOpenError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session is not open")
+    except svc.EmptySessionError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Enter at least one quantity before continuing.",
+        )
 
 
 @router.post(
@@ -278,3 +312,24 @@ def direct_receive(
         colour=payload.colour,
         size=payload.size,
     )
+
+
+@router.post(
+    "/direct-receive/batch",
+    response_model=list[ProductVariantRead],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
+)
+def direct_receive_batch(
+    payload: DirectReceiveBatchRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin-only bulk receipt, applied immediately and transactionally."""
+    try:
+        return svc.admin_direct_receive_batch(
+            db,
+            admin_id=user.id,
+            items=[item.model_dump() for item in payload.items],
+        )
+    except svc.ProductNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")

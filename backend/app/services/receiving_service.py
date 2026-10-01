@@ -71,6 +71,10 @@ class EmptySessionError(Exception):
     pass
 
 
+class ProductNotFoundError(Exception):
+    pass
+
+
 def _admin_recipient_id(db: Session) -> uuid.UUID | None:
     # Exactly one Admin account exists in this system (PRD section 5).
     admin = db.query(User).filter(User.role == UserRole.ADMIN).first()
@@ -144,6 +148,89 @@ def submit_item(
     db.commit()
     db.refresh(item)
     return item
+
+
+def submit_items_and_complete(
+    db: Session,
+    session_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    items: list[dict],
+) -> StockReceivingSession:
+    """Atomically save a grid submission and mark its session complete.
+
+    Locking the session makes retries safe: after one successful commit,
+    any concurrent or repeated submission sees a non-OPEN session.
+    """
+    session = (
+        db.query(StockReceivingSession)
+        .filter(StockReceivingSession.id == session_id)
+        .with_for_update()
+        .first()
+    )
+    if session is None:
+        raise SessionNotFoundError()
+    if session.status != ReceivingSessionStatus.OPEN:
+        raise SessionNotOpenError()
+    if not items:
+        raise EmptySessionError()
+
+    product_ids = {item["product_id"] for item in items}
+    existing_product_ids = {
+        row[0] for row in db.query(Product.id).filter(Product.id.in_(product_ids)).all()
+    }
+    if existing_product_ids != product_ids:
+        raise ProductNotFoundError()
+
+    try:
+        for item_data in items:
+            db.add(
+                StockReceivingItem(
+                    session_id=session.id,
+                    product_id=item_data["product_id"],
+                    submitted_by=actor_id,
+                    colour=(item_data.get("colour") or "").strip(),
+                    size=(item_data.get("size") or "").strip(),
+                    quantity_submitted=item_data["quantity_submitted"],
+                    price_submitted=item_data["price_submitted"],
+                    status=ReceivingItemStatus.PENDING,
+                )
+            )
+
+        session.status = ReceivingSessionStatus.STAFF_COMPLETED
+        session.completed_at = datetime.now(timezone.utc)
+        session.completed_by = actor_id
+
+        admin_id = _admin_recipient_id(db)
+        if admin_id is not None and admin_id != actor_id:
+            notification_service.notify(
+                db,
+                recipient_id=admin_id,
+                type=NotificationType.RECEIVING_COMPLETED,
+                title="Receiving Session Completed",
+                message=(
+                    f"Staff has completed entering stock for Receiving Session "
+                    f"#{str(session.id)[:8]}. Review the submission when ready."
+                ),
+                receiving_session_id=session.id,
+                commit=False,
+            )
+
+        audit_service.log_event(
+            db,
+            event_type="receiving.staff_completed",
+            user_id=actor_id,
+            resource=f"session:{session_id}",
+            result="success",
+            metadata={"item_count": len(items), "total_quantity": sum(i["quantity_submitted"] for i in items)},
+            commit=False,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    db.refresh(session)
+    return session
 
 
 def complete_session(
@@ -520,3 +607,69 @@ def admin_direct_receive(
 
     db.refresh(variant)
     return variant
+
+
+def admin_direct_receive_batch(
+    db: Session,
+    admin_id: uuid.UUID,
+    items: list[dict],
+) -> list[ProductVariant]:
+    """Apply a complete direct-receive grid as one atomic stock update."""
+    if not items:
+        raise ValueError("At least one receiving line is required")
+
+    product_ids = {item["product_id"] for item in items}
+    existing_product_ids = {
+        row[0] for row in db.query(Product.id).filter(Product.id.in_(product_ids)).all()
+    }
+    if existing_product_ids != product_ids:
+        raise ProductNotFoundError()
+
+    variants: list[ProductVariant] = []
+    audit_lines = []
+    try:
+        for item in items:
+            product_id = item["product_id"]
+            colour = (item.get("colour") or "").strip()
+            size = (item.get("size") or "").strip()
+            quantity = item["quantity"]
+            price = item["price"]
+
+            variant = _get_or_create_variant(db, product_id, colour, size)
+            variant.stock_quantity += quantity
+            product = db.query(Product).filter(Product.id == product_id).with_for_update().first()
+            if product is None:
+                raise ProductNotFoundError()
+            product.listed_price = price
+            variants.append(variant)
+            audit_lines.append(
+                {
+                    "product_id": str(product_id),
+                    "colour": colour,
+                    "size": size,
+                    "quantity": quantity,
+                    "price": str(price),
+                }
+            )
+
+        audit_service.log_event(
+            db,
+            event_type="receiving.direct_admin_receipt",
+            user_id=admin_id,
+            resource="receiving:direct",
+            result="success",
+            metadata={
+                "line_count": len(items),
+                "total_quantity": sum(item["quantity"] for item in items),
+                "items": audit_lines,
+            },
+            commit=False,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    for variant in variants:
+        db.refresh(variant)
+    return variants
