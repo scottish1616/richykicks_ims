@@ -216,7 +216,7 @@ export default function ReceivingBuilder({
   }
 
   return (
-    <section className="rounded-2xl border border-amber-500/25 bg-slate-900 p-4 shadow-xl shadow-black/20 sm:p-6">
+    <section className="glass-panel rounded-2xl border-amber-500/25 p-4 sm:p-6">
       <div className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-400">
           {mode === "direct" ? "Admin · Immediate inventory update" : "Staff · Admin approval required"}

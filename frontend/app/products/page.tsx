@@ -114,7 +114,7 @@ export default function Page() {
           automatically once stock for them is received and approved.
         </p>
 
-        <div className="mt-2 overflow-hidden rounded-lg border border-soft-gray/20">
+        <div className="glass-panel mt-2 overflow-hidden rounded-lg">
           <table className="w-full text-left text-sm">
             <thead className="bg-charcoal text-soft-gray">
               <tr>

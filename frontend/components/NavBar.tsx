@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../lib/auth-context";
@@ -33,6 +34,7 @@ export default function NavBar() {
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   if (!user) return null;
 
@@ -44,12 +46,24 @@ export default function NavBar() {
   }
 
   return (
-    <nav className="border-b border-soft-gray/20 bg-charcoal">
+    <nav className="glass-panel sticky top-0 z-40 border-x-0 border-t-0">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
         <div className="flex items-center gap-6">
-          <span className="font-semibold text-ivory">
-            Richy<span className="text-gold">Kicks</span>
-          </span>
+          <Link href="/dashboard" aria-label="RichyKicks dashboard" className="flex items-center gap-2">
+            {!logoFailed && (
+              <Image
+                src="/richykicks-logo.png"
+                alt=""
+                width={34}
+                height={34}
+                className="h-8 w-8 object-contain"
+                onError={() => setLogoFailed(true)}
+              />
+            )}
+            <span className="font-semibold text-ivory">
+              Richy<span className="text-gold">Kicks</span>
+            </span>
+          </Link>
           <div className="hidden gap-4 sm:flex">
             {links.map((link) => (
               <Link

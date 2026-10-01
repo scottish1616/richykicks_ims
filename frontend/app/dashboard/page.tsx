@@ -100,7 +100,7 @@ function AdminDashboard({ name }: { name: string }) {
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-lg border border-soft-gray/20 bg-charcoal p-5">
+          <div key={card.label} className="glass-panel rounded-xl p-5">
             <p className="text-sm text-soft-gray">{card.label}</p>
             <p className="mt-2 text-2xl font-semibold text-ivory">{card.value}</p>
           </div>
@@ -110,17 +110,17 @@ function AdminDashboard({ name }: { name: string }) {
 
       <h2 className="mt-10 text-sm font-medium text-soft-gray">Receiving</h2>
       <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border border-soft-gray/20 bg-charcoal p-5">
+        <div className="glass-panel rounded-xl p-5">
           <p className="text-sm text-soft-gray">Active Session</p>
           <p className="mt-2 text-lg font-semibold text-ivory">
             {activeSession ? activeSession.status.replace("_", " ") : "None"}
           </p>
         </div>
-        <div className="rounded-lg border border-soft-gray/20 bg-charcoal p-5">
+        <div className="glass-panel rounded-xl p-5">
           <p className="text-sm text-soft-gray">Awaiting Your Review</p>
           <p className="mt-2 text-lg font-semibold text-gold">{awaitingReviewCount}</p>
         </div>
-        <div className="rounded-lg border border-soft-gray/20 bg-charcoal p-5">
+        <div className="glass-panel rounded-xl p-5">
           <p className="text-sm text-soft-gray">Recently Finalized</p>
           <p className="mt-2 text-lg font-semibold text-ivory">{recentFinalized.length}</p>
         </div>
@@ -131,7 +131,7 @@ function AdminDashboard({ name }: { name: string }) {
           {recentFinalized.map((s) => (
             <div
               key={s.id}
-              className="flex items-center justify-between rounded-md border border-soft-gray/10 bg-midnight px-4 py-2 text-sm"
+              className="glass-panel flex items-center justify-between rounded-lg px-4 py-2 text-sm"
             >
               <span className="text-soft-gray">Session {s.id.slice(0, 8)}</span>
               <span className={s.status === "approved" ? "text-success" : "text-error"}>
@@ -190,7 +190,7 @@ function StaffDashboard({ name }: { name: string }) {
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-lg border border-soft-gray/20 bg-charcoal p-5">
+          <div key={card.label} className="glass-panel rounded-xl p-5">
             <p className="text-sm text-soft-gray">{card.label}</p>
             <p className="mt-2 text-2xl font-semibold text-ivory">{card.value}</p>
           </div>
@@ -199,7 +199,7 @@ function StaffDashboard({ name }: { name: string }) {
       </div>
 
       {activeSession && (
-        <div className="mt-8 rounded-lg border border-gold/40 bg-charcoal p-5">
+        <div className="glass-panel mt-8 rounded-xl border-gold/30 p-5">
           <p className="text-sm text-soft-gray">Active Receiving Session</p>
           <p className="mt-1 text-ivory">
             Status: <span className="text-gold">{activeSession.status.replace("_", " ")}</span>
@@ -211,7 +211,7 @@ function StaffDashboard({ name }: { name: string }) {
       )}
 
       <h2 className="mt-10 text-sm font-medium text-soft-gray">Recent Sales</h2>
-      <div className="mt-2 overflow-x-auto rounded-lg border border-soft-gray/20">
+      <div className="glass-panel mt-2 overflow-x-auto rounded-lg">
         <table className="w-full text-left text-sm">
           <thead className="bg-charcoal text-soft-gray">
             <tr>
