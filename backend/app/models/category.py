@@ -1,7 +1,4 @@
-"""
-Fixed seed list of 8 categories (PRD section 5). Stored in the DB, not
-hardcoded across the frontend. Only Admin can manage these.
-"""
+"""Seed category names stored in the database, not hardcoded in the UI."""
 import uuid
 
 from sqlalchemy import String
@@ -19,6 +16,7 @@ SEED_CATEGORY_NAMES = [
     "Mikasa Balls",
     "Socks",
     "High Heels",
+    "Sports Wear",
 ]
 
 

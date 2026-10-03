@@ -1,7 +1,7 @@
 """
 Static per-category standard size options for the receiving item-entry
-checkbox grid. This is a fixed reference table, not a database table -
-the 8 categories themselves are fixed (see category.py's
+quantity grid. This is a reference table, not a database table -
+the seeded categories themselves are maintained in category.py's
 SEED_CATEGORY_NAMES), so there's nothing here that needs to be
 editable through the UI.
 
@@ -12,6 +12,7 @@ ever come into existence through the receiving-approval workflow
 """
 
 STANDARD_SHOE_SIZES = [str(n) for n in range(36, 47)]  # "36".."46"
+STANDARD_APPAREL_SIZES = ["XS", "S", "M", "L", "XL", "XXL"]
 
 # A category with no sizes listed here falls back to a single
 # free-text colour/size pair in the receiving-entry form (PRD section
@@ -23,6 +24,7 @@ CATEGORY_SIZE_OPTIONS: dict[str, list[str]] = {
     "Crocs": STANDARD_SHOE_SIZES,
     "Football Boots": STANDARD_SHOE_SIZES,
     "High Heels": STANDARD_SHOE_SIZES,
+    "Sports Wear": STANDARD_APPAREL_SIZES,
     "Mikasa Balls": [],
     "Socks": [],
 }

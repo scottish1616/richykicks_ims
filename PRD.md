@@ -62,7 +62,7 @@ Cannot: manage staff/roles, approve their own (or any) receiving, delete histori
 ## 6. Core Data Entities
 
 - **User** — id, name, email, password_hash, role (admin/staff), active flag, timestamps
-- **Category** — fixed seed list: Sneakers, Slides, Ladies' Shoes, Crocs, Football Boots, Mikasa Balls, Socks, High Heels
+- **Category** — seeded list: Sneakers, Slides, Ladies' Shoes, Crocs, Football Boots, Mikasa Balls, Socks, High Heels, Sports Wear
 - **Product** — id, name, category_id, listed_price, stock_quantity, computed stock_status, active flag, timestamps
 - **Sale** — id, product_id, quantity, listed_price_at_sale, actual_price_paid, total, staff_id, created_at
 - **StockReceivingSession** — id, opened_by (admin), status (open/pending/approved/rejected), timestamps
