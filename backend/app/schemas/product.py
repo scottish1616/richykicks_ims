@@ -4,7 +4,6 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 class ProductBase(BaseModel):
     name: str
     category_id: uuid.UUID
@@ -42,6 +41,11 @@ class StockAdjustmentRequest(BaseModel):
         if value == 0:
             raise ValueError("Stock adjustment must not be zero")
         return value
+
+
+class ProductVariantAdjustmentRequest(StockAdjustmentRequest):
+    colour: str | None = Field(default=None, max_length=50)
+    size: str | None = Field(default=None, max_length=10)
 
 
 class ProductVariantRead(BaseModel):

@@ -20,6 +20,7 @@ from app.schemas.product import (
     ProductCreate,
     ProductRead,
     ProductUpdate,
+    ProductVariantAdjustmentRequest,
     ProductVariantRead,
     StockAdjustmentRequest,
 )
@@ -199,6 +200,41 @@ def adjust_stock(
         )
     except inventory_service.VariantNotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found")
+    except inventory_service.NegativeStockAdjustmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Stock cannot be negative. Current stock is {exc.available}.",
+        )
+
+
+@router.post(
+    "/{product_id}/variants/adjust-stock",
+    response_model=ProductVariantRead,
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
+)
+def adjust_product_variant_stock(
+    product_id: uuid.UUID,
+    payload: ProductVariantAdjustmentRequest,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return inventory_service.adjust_product_variant_stock(
+            db,
+            product_id=product_id,
+            colour=(payload.colour or "").strip(),
+            size=(payload.size or "").strip(),
+            adjustment=payload.adjustment,
+            reason=payload.reason,
+            actor_id=user.id,
+        )
+    except inventory_service.ProductNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    except inventory_service.UnsupportedVariantColourError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New variants must use one of the supported colours.",
+        )
     except inventory_service.NegativeStockAdjustmentError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

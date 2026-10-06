@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { apiFetch } from "../../lib/api";
 import type { Category, Product, ReceivingSession } from "../../types";
 import Button from "../../components/Button";
+import { NO_COLOUR_VALUE, PRODUCT_COLOURS } from "../../lib/product-colours";
 
 type ReceivingLine = {
   id: string;
@@ -46,10 +47,6 @@ export default function ReceivingBuilder({
 
   const product = products.find((candidate) => candidate.id === productId);
   const category = categories.find((candidate) => candidate.id === product?.category_id);
-  const colours = useMemo(
-    () => Array.from(new Set((product?.variants ?? []).map((variant) => variant.colour).filter(Boolean))),
-    [product]
-  );
   const sizes = useMemo(() => {
     const categorySizes = category?.sizes ?? [];
     const knownSizes = (product?.variants ?? []).map((variant) => variant.size).filter(Boolean);
@@ -78,8 +75,9 @@ export default function ReceivingBuilder({
   }
 
   function currentStock(size: string): number {
+    const selectedColour = colour === NO_COLOUR_VALUE ? "" : colour;
     return (
-      product?.variants.find((variant) => variant.colour === colour && variant.size === size)
+      product?.variants.find((variant) => variant.colour === selectedColour && variant.size === size)
         ?.stock_quantity ?? 0
     );
   }
@@ -91,7 +89,7 @@ export default function ReceivingBuilder({
       setError("Select a product before continuing.");
       return;
     }
-    if (colours.length > 0 && !colour) {
+    if (!colour) {
       setError("Select a colour before continuing.");
       return;
     }
@@ -115,10 +113,11 @@ export default function ReceivingBuilder({
       const next = previous.map((line) =>
         line.product_id === product.id ? { ...line, price } : line
       );
+      const selectedColour = colour === NO_COLOUR_VALUE ? "" : colour;
       for (const [size, received] of quantities) {
         const existingIndex = next.findIndex(
           (line) =>
-            line.product_id === product.id && line.colour === colour && line.size === size
+            line.product_id === product.id && line.colour === selectedColour && line.size === size
         );
         if (existingIndex >= 0) {
           next[existingIndex] = {
@@ -128,9 +127,9 @@ export default function ReceivingBuilder({
           };
         } else {
           next.push({
-            id: `${product.id}:${colour}:${size}:${crypto.randomUUID()}`,
+            id: `${product.id}:${selectedColour}:${size}:${crypto.randomUUID()}`,
             product_id: product.id,
-            colour,
+            colour: selectedColour,
             size,
             quantity: received,
             price,
@@ -270,32 +269,27 @@ export default function ReceivingBuilder({
               </div>
             </div>
 
-            {colours.length > 0 && (
-              <div className="mt-5">
-                <p className="mb-2 text-sm font-medium text-slate-200">Colour</p>
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Choose colour">
-                  {colours.map((option) => {
-                    const selected = option === colour;
-                    return (
-                      <button
-                        key={option}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => setColour(option)}
-                        className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-amber-400/70 ${
-                          selected
-                            ? "border-amber-400 bg-blue-900 text-white shadow-sm shadow-amber-500/15"
-                            : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:text-white"
-                        }`}
-                      >
-                        <span className="mr-2" aria-hidden="true">{selected ? "●" : "○"}</span>
-                        {option}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            <div className="mt-5">
+              <label htmlFor={`receive-colour-${mode}`} className="block text-sm font-medium text-slate-200">
+                Colour
+              </label>
+              <select
+                id={`receive-colour-${mode}`}
+                value={colour}
+                onChange={(event) => {
+                  setColour(event.target.value);
+                  setSizeQuantities({});
+                  setQuantity("");
+                }}
+                className={fieldClass}
+              >
+                <option value="">Choose a colour</option>
+                <option value={NO_COLOUR_VALUE}>No colour</option>
+                {PRODUCT_COLOURS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
 
             {isSizeBased ? (
               <div className="mt-5">
@@ -323,7 +317,7 @@ export default function ReceivingBuilder({
                         onChange={(event) =>
                           setSizeQuantities((previous) => ({ ...previous, [size]: event.target.value }))
                         }
-                        disabled={colours.length > 0 && !colour}
+                        disabled={!colour}
                         className="min-w-0 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-3 text-base text-white outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3"
                       />
                     </div>
@@ -341,7 +335,7 @@ export default function ReceivingBuilder({
                   value={quantity}
                   onChange={(event) => setQuantity(event.target.value)}
                   placeholder="Enter quantity"
-                  disabled={colours.length > 0 && !colour}
+                  disabled={!colour}
                   className={`${fieldClass} text-base disabled:cursor-not-allowed disabled:opacity-50`}
                 />
               </div>

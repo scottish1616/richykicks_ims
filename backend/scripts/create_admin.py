@@ -27,12 +27,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Create the RichyKicks Admin account")
     parser.add_argument("--name", required=True)
     parser.add_argument("--email", required=True)
+    parser.add_argument("--force-second-admin", action="store_true")
     args = parser.parse_args()
 
     db = SessionLocal()
     try:
         existing_admin = db.query(User).filter(User.role == UserRole.ADMIN).first()
-        if existing_admin is not None:
+        if existing_admin is not None and not args.force_second_admin:
             print(f"An Admin account already exists: {existing_admin.email}")
             print("Only one Admin account is allowed (PRD section 3). Aborting.")
             sys.exit(1)

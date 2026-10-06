@@ -6,6 +6,7 @@ import { useAuth } from "../../lib/auth-context";
 import { apiFetch } from "../../lib/api";
 import Button from "../../components/Button";
 import NavBar from "../../components/NavBar";
+import { NO_COLOUR_VALUE, PRODUCT_COLOURS } from "../../lib/product-colours";
 import type { Product, Category, ProductVariant } from "../../types";
 
 export default function Page() {
@@ -135,6 +136,7 @@ export default function Page() {
                     key={p.id}
                     product={p}
                     categoryName={categoryName(p.category_id)}
+                    categorySizes={categories.find((category) => category.id === p.category_id)?.sizes ?? []}
                     expanded={expanded}
                     onToggle={() => setExpandedId(expanded ? null : p.id)}
                     isAdmin={isAdmin}
@@ -179,6 +181,7 @@ export default function Page() {
 function ProductRowGroup({
   product,
   categoryName,
+  categorySizes,
   expanded,
   onToggle,
   isAdmin,
@@ -188,6 +191,7 @@ function ProductRowGroup({
 }: {
   product: Product;
   categoryName: string;
+  categorySizes: string[];
   expanded: boolean;
   onToggle: () => void;
   isAdmin: boolean;
@@ -196,6 +200,7 @@ function ProductRowGroup({
   onStockChanged: () => void;
 }) {
   const [adjustingVariant, setAdjustingVariant] = useState<ProductVariant | null>(null);
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   return (
     <>
       <tr
@@ -268,7 +273,10 @@ function ProductRowGroup({
                             type="button"
                             variant="secondary"
                             className="px-2 py-1 text-xs"
-                            onClick={() => setAdjustingVariant(v)}
+                            onClick={() => {
+                              setAdjustingVariant(v);
+                              setAdjustmentOpen(true);
+                            }}
                           >
                             Adjust Stock
                           </Button>
@@ -279,13 +287,28 @@ function ProductRowGroup({
                 </tbody>
               </table>
             )}
-            {isAdmin && adjustingVariant && (
-              <StockAdjustmentForm
-                product={product}
-                variant={adjustingVariant}
-                onCancel={() => setAdjustingVariant(null)}
-                onAdjusted={() => {
+            {isAdmin && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="mt-3 px-3 py-1.5 text-xs"
+                onClick={() => {
                   setAdjustingVariant(null);
+                  setAdjustmentOpen(true);
+                }}
+              >
+                Adjust / Edit Stock
+              </Button>
+            )}
+            {isAdmin && adjustmentOpen && (
+              <StockAdjustmentForm
+                key={adjustingVariant?.id ?? "new-variant"}
+                product={product}
+                categorySizes={categorySizes}
+                variant={adjustingVariant}
+                onCancel={() => setAdjustmentOpen(false)}
+                onAdjusted={() => {
+                  setAdjustmentOpen(false);
                   onStockChanged();
                 }}
               />
@@ -409,38 +432,68 @@ function ProductForm({
 
 function StockAdjustmentForm({
   product,
+  categorySizes,
   variant,
   onCancel,
   onAdjusted,
 }: {
   product: Product;
-  variant: ProductVariant;
+  categorySizes: string[];
+  variant: ProductVariant | null;
   onCancel: () => void;
   onAdjusted: () => void;
 }) {
-  const [adjustment, setAdjustment] = useState("");
+  const [colourChoice, setColourChoice] = useState(
+    variant?.colour || NO_COLOUR_VALUE
+  );
+  const [sizeChoice, setSizeChoice] = useState(
+    variant ? variant.size || NO_COLOUR_VALUE : categorySizes.length > 0 ? "" : NO_COLOUR_VALUE
+  );
+  const [direction, setDirection] = useState<"increase" | "decrease">("increase");
+  const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const resultingStock = variant.stock_quantity + Number(adjustment || 0);
+  const colour = colourChoice === NO_COLOUR_VALUE ? "" : colourChoice;
+  const size = sizeChoice === NO_COLOUR_VALUE ? "" : sizeChoice;
+  const sizes = Array.from(new Set([...categorySizes, ...product.variants.map((item) => item.size).filter(Boolean)]));
+  const colours = Array.from(new Set([
+    ...PRODUCT_COLOURS,
+    ...product.variants.map((item) => item.colour).filter(Boolean),
+  ]));
+  const currentStock = product.variants.find(
+    (item) => item.colour === colour && item.size === size
+  )?.stock_quantity ?? 0;
+  const amount = Number(quantity);
+  const adjustment = direction === "increase" ? amount : -amount;
+  const resultingStock = currentStock + (Number.isFinite(adjustment) ? adjustment : 0);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    const amount = Number(adjustment);
-    if (!Number.isInteger(amount) || amount === 0) {
-      setError("Enter a non-zero whole-number adjustment.");
+    const enteredQuantity = Number(quantity);
+    if (!colourChoice || !sizeChoice) {
+      setError("Select a colour and size before continuing.");
       return;
     }
-    if (variant.stock_quantity + amount < 0) {
+    if (!Number.isInteger(enteredQuantity) || enteredQuantity <= 0) {
+      setError("Enter a positive whole-number quantity.");
+      return;
+    }
+    if (currentStock + adjustment < 0) {
       setError("Stock cannot be adjusted below zero.");
       return;
     }
     setSaving(true);
     try {
-      await apiFetch<ProductVariant>(`/api/products/variants/${variant.id}/adjust-stock`, {
+      await apiFetch<ProductVariant>(`/api/products/${product.id}/variants/adjust-stock`, {
         method: "POST",
-        body: JSON.stringify({ adjustment: amount, reason }),
+        body: JSON.stringify({
+          colour: colour || null,
+          size: size || null,
+          adjustment,
+          reason,
+        }),
       });
       onAdjusted();
     } catch (err) {
@@ -453,21 +506,56 @@ function StockAdjustmentForm({
   return (
     <form onSubmit={handleSubmit} className="mt-4 max-w-2xl rounded-lg border border-gold/30 bg-charcoal p-4">
       <h3 className="font-medium text-ivory">
-        Adjust Stock · {product.name} · {[variant.colour, variant.size].filter(Boolean).join(" / ") || "Standard"}
+        Adjust / Edit Stock · {product.name}
       </h3>
       <p className="mt-1 text-xs text-soft-gray">
-        Current: {variant.stock_quantity} · New stock: {Number.isFinite(resultingStock) ? resultingStock : variant.stock_quantity}
+        Current: {currentStock} · New stock: {Number.isFinite(resultingStock) ? resultingStock : currentStock}
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="text-sm text-soft-gray">
-          Adjustment (+ add / − remove)
+          Colour
+          <select
+            value={colourChoice}
+            onChange={(event) => setColourChoice(event.target.value)}
+            className="mt-1 w-full rounded-md border border-soft-gray/30 bg-midnight px-3 py-2 text-ivory"
+          >
+            <option value={NO_COLOUR_VALUE}>No colour</option>
+            {colours.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </label>
+        <label className="text-sm text-soft-gray">
+          Size
+          <select
+            value={sizeChoice}
+            onChange={(event) => setSizeChoice(event.target.value)}
+            className="mt-1 w-full rounded-md border border-soft-gray/30 bg-midnight px-3 py-2 text-ivory"
+          >
+            <option value="">Choose a size</option>
+            {sizes.map((option) => <option key={option} value={option}>{option}</option>)}
+            <option value={NO_COLOUR_VALUE}>No size</option>
+          </select>
+        </label>
+        <label className="text-sm text-soft-gray">
+          Adjustment
+          <select
+            value={direction}
+            onChange={(event) => setDirection(event.target.value as "increase" | "decrease")}
+            className="mt-1 w-full rounded-md border border-soft-gray/30 bg-midnight px-3 py-2 text-ivory"
+          >
+            <option value="increase">Increase</option>
+            <option value="decrease">Decrease</option>
+          </select>
+        </label>
+        <label className="text-sm text-soft-gray">
+          Quantity
           <input
             type="number"
+            min="1"
             step="1"
             required
-            value={adjustment}
-            onChange={(event) => setAdjustment(event.target.value)}
-            placeholder="e.g. 5 or -2"
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            placeholder="Enter quantity"
             className="mt-1 w-full rounded-md border border-soft-gray/30 bg-midnight px-3 py-2 text-ivory"
           />
         </label>

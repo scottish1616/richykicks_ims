@@ -2,8 +2,9 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.product_colours import normalize_product_colour
 from app.models.stock_receiving import ReceivingItemStatus, ReceivingSessionStatus
 
 
@@ -33,6 +34,11 @@ class ReceivingItemCreate(BaseModel):
     quantity_submitted: int = Field(gt=0)
     price_submitted: Decimal = Field(ge=0)
 
+    @field_validator("colour")
+    @classmethod
+    def colour_must_be_supported(cls, value: str | None) -> str | None:
+        return normalize_product_colour(value)
+
 
 class ReceivingBatchItemCreate(BaseModel):
     product_id: uuid.UUID
@@ -40,6 +46,11 @@ class ReceivingBatchItemCreate(BaseModel):
     size: str | None = Field(default=None, max_length=10)
     quantity_submitted: int = Field(gt=0)
     price_submitted: Decimal = Field(ge=0)
+
+    @field_validator("colour")
+    @classmethod
+    def colour_must_be_supported(cls, value: str | None) -> str | None:
+        return normalize_product_colour(value)
 
 
 class ReceivingBatchCreate(BaseModel):
@@ -87,6 +98,11 @@ class DirectReceiveRequest(BaseModel):
     quantity: int = Field(gt=0)
     price: Decimal = Field(ge=0)
 
+    @field_validator("colour")
+    @classmethod
+    def colour_must_be_supported(cls, value: str | None) -> str | None:
+        return normalize_product_colour(value)
+
 
 class DirectReceiveBatchItem(BaseModel):
     product_id: uuid.UUID
@@ -94,6 +110,11 @@ class DirectReceiveBatchItem(BaseModel):
     size: str | None = Field(default=None, max_length=10)
     quantity: int = Field(gt=0)
     price: Decimal = Field(ge=0)
+
+    @field_validator("colour")
+    @classmethod
+    def colour_must_be_supported(cls, value: str | None) -> str | None:
+        return normalize_product_colour(value)
 
 
 class DirectReceiveBatchRequest(BaseModel):
