@@ -4,6 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from app.core.product_sizes import CATEGORY_SIZE_OPTIONS
+from app.models.category import SEED_CATEGORY_NAMES
 from app.services import inventory_service
 
 
@@ -86,3 +88,8 @@ def test_adjustment_cannot_create_variant_with_unsupported_colour():
         )
 
     db.commit.assert_not_called()
+
+
+def test_seed_categories_include_bags():
+    assert "Bags" in SEED_CATEGORY_NAMES
+    assert CATEGORY_SIZE_OPTIONS["Bags"] == []

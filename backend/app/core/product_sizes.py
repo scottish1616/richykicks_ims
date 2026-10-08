@@ -27,6 +27,7 @@ CATEGORY_SIZE_OPTIONS: dict[str, list[str]] = {
     "Sports Wear": STANDARD_APPAREL_SIZES,
     "Mikasa Balls": [],
     "Socks": [],
+    "Bags": [],
 }
 
 

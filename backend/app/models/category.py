@@ -15,6 +15,7 @@ SEED_CATEGORY_NAMES = [
     "Football Boots",
     "Mikasa Balls",
     "Socks",
+    "Bags",
     "High Heels",
     "Sports Wear",
 ]
