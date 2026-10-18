@@ -140,15 +140,26 @@ function RecordSaleForm({
 
   const sellable = useMemo(() => products.filter((p) => p.variants.length > 0), [products]);
 
-  const createDraft = (productId = sellable[0]?.id ?? ""): SaleItemDraft => ({
-    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    productId,
-    colour: "",
-    size: "",
-    quantity: "1",
-    actualPrice: "",
-    paymentType: "cash",
-  });
+  function preferredVariant(product: Product, colour?: string) {
+    const variants = colour === undefined
+      ? product.variants
+      : product.variants.filter((variant) => variant.colour === colour);
+    return variants.find((variant) => variant.stock_quantity > 0) ?? variants[0] ?? null;
+  }
+
+  const createDraft = (productId = sellable[0]?.id ?? ""): SaleItemDraft => {
+    const product = sellable.find((candidate) => candidate.id === productId);
+    const variant = product ? preferredVariant(product) : null;
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      productId,
+      colour: variant?.colour ?? "",
+      size: variant?.size ?? "",
+      quantity: "1",
+      actualPrice: "",
+      paymentType: "cash",
+    };
+  };
 
   const [saleItems, setSaleItems] = useState<SaleItemDraft[]>(() =>
     sellable.length > 0 ? [createDraft(sellable[0].id)] : [],
@@ -179,10 +190,13 @@ function RecordSaleForm({
     const product = sellable.find((candidate) => candidate.id === item.productId) ?? null;
     if (!product) return null;
 
-    const colours = Array.from(new Set(product.variants.map((variant) => variant.colour)));
-    const resolvedColour = item.colour || colours[0] || "";
-    const sizesForColour = product.variants.filter((variant) => variant.colour === resolvedColour);
-    const resolvedSize = item.size || sizesForColour[0]?.size || "";
+    const resolvedColour = product.variants.some((variant) => variant.colour === item.colour)
+      ? item.colour
+      : preferredVariant(product)?.colour ?? "";
+    const variantsForColour = product.variants.filter((variant) => variant.colour === resolvedColour);
+    const resolvedSize = variantsForColour.some((variant) => variant.size === item.size)
+      ? item.size
+      : preferredVariant(product, resolvedColour)?.size ?? "";
 
     return (
       product.variants.find(
@@ -214,26 +228,32 @@ function RecordSaleForm({
     e.preventDefault();
     setError(null);
 
-    const payloads = saleItems.map((item) => {
-      const product = sellable.find((candidate) => candidate.id === item.productId) ?? null;
-      const variant = getVariantForItem(item);
+    let payloads;
+    try {
+      payloads = saleItems.map((item) => {
+        const product = sellable.find((candidate) => candidate.id === item.productId) ?? null;
+        const variant = getVariantForItem(item);
 
-      if (!product || !variant) {
-        throw new Error("Select a valid product and variant for every item.");
-      }
+        if (!product || !variant) {
+          throw new Error("Select a valid product, colour, and size for every item.");
+        }
 
-      const quantity = Number(item.quantity);
-      if (!Number.isFinite(quantity) || quantity < 1 || quantity > variant.stock_quantity) {
-        throw new Error(`"${product.name}" has insufficient stock or invalid quantity.`);
-      }
+        const quantity = Number(item.quantity);
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > variant.stock_quantity) {
+          throw new Error(`"${product.name}" has insufficient stock or invalid quantity.`);
+        }
 
-      return {
-        product_variant_id: variant.id,
-        quantity,
-        actual_price_paid: item.actualPrice ? Number(item.actualPrice) : Number(product.listed_price),
-        payment_type: item.paymentType,
-      };
-    });
+        return {
+          product_variant_id: variant.id,
+          quantity,
+          actual_price_paid: item.actualPrice ? Number(item.actualPrice) : Number(product.listed_price),
+          payment_type: item.paymentType,
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Select a valid variant for every item.");
+      return;
+    }
 
     if (payloads.length === 0) {
       setError("Add at least one item before recording a sale.");
@@ -272,10 +292,17 @@ function RecordSaleForm({
         {saleItems.map((item, index) => {
           const product = sellable.find((candidate) => candidate.id === item.productId) ?? sellable[0];
           const colours = product ? Array.from(new Set(product.variants.map((variant) => variant.colour))) : [];
-          const mappedSizes =
-            product && (item.colour || colours[0])
-              ? product.variants.filter((variant) => variant.colour === (item.colour || colours[0]))
-              : [];
+          const selectedColour = product && colours.includes(item.colour)
+            ? item.colour
+            : product ? preferredVariant(product)?.colour ?? colours[0] ?? "" : "";
+          const mappedSizes = product
+            ? product.variants
+                .filter((variant) => variant.colour === selectedColour)
+                .sort((a, b) => b.stock_quantity - a.stock_quantity || a.size.localeCompare(b.size, undefined, { numeric: true }))
+            : [];
+          const selectedSize = mappedSizes.some((variant) => variant.size === item.size)
+            ? item.size
+            : preferredVariant(product, selectedColour)?.size ?? "";
           const variant = getVariantForItem(item);
 
           return (
@@ -318,7 +345,7 @@ function RecordSaleForm({
                 <div>
                   <label className="block text-sm text-soft-gray">Colour</label>
                   <select
-                    value={item.colour || (colours[0] ?? "")}
+                    value={selectedColour}
                     onChange={(e) => updateItem(item.id, { colour: e.target.value, size: "" })}
                     className="mt-1 w-full rounded-md border border-soft-gray/30 bg-charcoal px-3 py-2 text-ivory outline-none focus:border-gold"
                   >
@@ -333,10 +360,11 @@ function RecordSaleForm({
                 <div>
                   <label className="block text-sm text-soft-gray">Size</label>
                   <select
-                    value={item.size || (mappedSizes[0]?.size ?? "")}
+                    value={selectedSize}
                     onChange={(e) => updateItem(item.id, { size: e.target.value })}
                     className="mt-1 w-full rounded-md border border-soft-gray/30 bg-charcoal px-3 py-2 text-ivory outline-none focus:border-gold"
                   >
+                    {mappedSizes.length === 0 && <option value="">No sizes available</option>}
                     {mappedSizes.map((variantOption) => (
                       <option key={variantOption.id} value={variantOption.size}>
                         {variantOption.size || "(no size)"} · {variantOption.stock_quantity} in stock
